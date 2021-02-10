@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-import socket, random
+import socket, random, os, time
 
 header = b"Reseautto pipe vBeta1.0"
 
@@ -16,18 +16,25 @@ while True:
 		pass
 
 sock.listen(1)
-print("Pipe waiting for connection on " + str(port))
+
+print("Starting C program...")
+pid = os.fork()
+if pid==0:
+	time.sleep(0.5) # wait for the parent to accept connections
+	os.execv("client", ("client", str(port)))
+	os._exit(os.EX_OSERR)
+
 cSock, addr  = sock.accept()
 cSock.send(header)
 
-print("Connected to " + str(addr))
+print("Pipe successfully created.\nPython (pid "+str(os.getpid())+" on ('127.0.0.1', "+ str(port) +")) =============================== C (pid "+ str(pid) +" on "+ str(addr) + ")")
 
 inpt = ""
 while inpt!="exit":
 	inpt = input()
 	cSock.send(inpt.encode())
-	print(cSock.recv(1024).decode())
 
 
+cSock.close()
 sock.close()
 

@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
 			stop("Process creation");
 			break;
 		case 0:
-			while (1) {
+			while (0) { // Non utilisé pour l'instant
 				bzero(sendBuff, BUF_SIZE);
 				n = 0;
 				while (n<BUF_SIZE && (sendBuff[n++] = getchar()) != '\n');
@@ -77,19 +77,15 @@ int main(int argc, char **argv) {
 			exit(EXIT_SUCCESS);
 			break;
 		default:
-			printf("\e[1mConnected to python game.\e[0m\n\n");
+			printf("\e[1mC Program is connected to python game.\e[0m\n\n");
 			while (strcmp(recvBuff, "exit")!=0) {
 				bzero(recvBuff, sizeof(recvBuff));
 				if (read(sockfd, recvBuff, sizeof(recvBuff))<0) {
 					stop("read");
 				}
-				printf("%s", recvBuff);
-				fflush(stdout);
+				printf("C program received : '%s'\n", recvBuff);
 			}
 	}
-
-	kill(pid, SIGTERM);
-	printf("\n");
 
 	close(sockfd);
 	return EXIT_SUCCESS;
