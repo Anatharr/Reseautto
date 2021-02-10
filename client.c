@@ -51,6 +51,7 @@ int main(int argc, char **argv) {
 	char sendBuff[BUF_SIZE+1];
 	bzero(recvBuff, BUF_SIZE+1);
 	bzero(sendBuff, BUF_SIZE+1);
+	recvBuff[0] = 1;
 
 	if (read(sockfd, recvBuff, BUF_SIZE)<0) {
 		close(sockfd);
@@ -78,7 +79,7 @@ int main(int argc, char **argv) {
 			break;
 		default:
 			printf("\e[1mC Program is connected to python game.\e[0m\n\n");
-			while (strcmp(recvBuff, "exit")!=0) {
+			while (recvBuff[0]!=0 && strcmp(recvBuff, "exit")!=0) {
 				bzero(recvBuff, sizeof(recvBuff));
 				if (read(sockfd, recvBuff, sizeof(recvBuff))<0) {
 					stop("read");
