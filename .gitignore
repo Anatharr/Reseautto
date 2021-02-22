@@ -1,5 +1,6 @@
 # compiled files
 client
+TCP/server
 
 # nano temporary files
 *.swp
