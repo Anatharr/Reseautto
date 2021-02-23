@@ -16,6 +16,8 @@
 #define CMD_UPDATE 5
 #define CMD_CONTINUE 6
 
+#define JOIN_FLAG_DATA 1 //Put on buffer[1] if the player already got the data
+
 /*
 #define JOIN_FLAG_PLAYER 1
 #define JOIN_FLAG_TABLE 2
@@ -30,6 +32,7 @@ int pythonsock = -1, fdpsock = -1;
 
 int handleCommand(char *recvBuffer, struct sockaddr_in from);
 void showPlayers();
+void broadcast();
 
 void stop(char *msg) {
 	if (pythonsock>=0) close(pythonsock);
@@ -109,7 +112,7 @@ int main(int argc, char **argv) {
 	if (getsockname(fdpsock, (struct sockaddr *)&fdpaddr, &len) < 0) {
 		stop("getsockname");
 	}
-	printf("binded to port %d\n", ntohs(fdpaddr.sin_port));
+	printf("binded to port \x1b[31m%d\x1b[0m\n", ntohs(fdpaddr.sin_port));
 	struct timeval timeout;
 	timeout.tv_sec = 0;
 	timeout.tv_usec = 100000;
@@ -179,6 +182,14 @@ int main(int argc, char **argv) {
 			}
 		}
 		showPlayers();
+
+		/* Inform other players */
+		for(int i = 0; i<playersNumber-1; i++) {
+			bzero(fdpBuff, BUF_SIZE+1);
+			fdpBuff[0] = CMD_JOIN;
+			fdpBuff[1] = JOIN_FLAG_DATA; //The player already know the data
+			sendto(fdpsock, fdpBuff, 3, 0, (struct sockaddr*) playersAddresses[i], sizeof(struct sockaddr_in));
+		}
 	}
 
 
@@ -217,6 +228,7 @@ int main(int argc, char **argv) {
 			}
 			pythonBuff[n] = '\0';
 			printf("C program received : '%s'\n", pythonBuff);
+			if(!strcmp(pythonBuff, "player")) showPlayers();
 		}
 	}
 
@@ -239,22 +251,14 @@ int handleCommand(char *recvBuffer, struct sockaddr_in from) {
 
 	switch (recvBuffer[0]) {
 	case CMD_JOIN: {
-/*		if (recvBuffer[1]==JOIN_FLAG_PLAYER) {
-		}
-		else if (recvBuffer[1]==JOIN_FLAG_JOIN) {
-		}*/
 		printf("Adding player...\n");
-		/* Acknowledge reception */
-		bzero(recvBuffer, BUF_SIZE);
-		recvBuffer[0] = CMD_ACK;
-		sendto(fdpsock, recvBuffer, 2, 0, (struct sockaddr*) &from, sizeof(struct sockaddr_in));
-
+		
 		/* Expand playersAddresses */
 		struct sockaddr_in **tmp = realloc(playersAddresses, (playersNumber+1) * sizeof(struct sockaddr_in*));
 		if (tmp==NULL) {
 			printf("Error : Could not add player");
 			return -1;
-		}
+			}
 
 		/* Copy the struct sockaddr_in as we don't want to lose it */
 		struct sockaddr_in *newPlayer = malloc(sizeof(struct sockaddr_in));
@@ -269,34 +273,37 @@ int handleCommand(char *recvBuffer, struct sockaddr_in from) {
 		playersNumber++;
 
 		showPlayers();
-
-		/* Send information to newPlayer */
-		bzero(recvBuffer, BUF_SIZE+1);
-		recvBuffer[0] = CMD_JOIN;
-//		recvBuffer[1] = JOIN_FLAG_TABLE;
-		memcpy(recvBuffer+1, &playersNumber, sizeof(playersNumber));
-		int len = 1+sizeof(playersNumber);
-		for (i=0; i<playersNumber; i++) {
-			memcpy(recvBuffer+len, playersAddresses[i], sizeof(struct sockaddr_in));
-			len += sizeof(struct sockaddr_in);
-			if (len > BUF_SIZE-sizeof(struct sockaddr_in)) {
-				sendto(fdpsock, recvBuffer, len+1, 0, (struct sockaddr*) newPlayer, sizeof(*newPlayer));
-				bzero(recvBuffer,BUF_SIZE);
-				recvBuffer[0] = CMD_CONTINUE;
-				len = 1;
+		broadcast();
+		if (recvBuffer[1]==0) {
+			/* Acknowledge reception */
+			bzero(recvBuffer, BUF_SIZE);
+			recvBuffer[0] = CMD_ACK;
+			sendto(fdpsock, recvBuffer, 2, 0, (struct sockaddr*) &from, sizeof(struct sockaddr_in));
+			/* Send information to newPlayer */
+			bzero(recvBuffer, BUF_SIZE+1);
+			recvBuffer[0] = CMD_JOIN;
+			//recvBuffer[1] = JOIN_FLAG_TABLE;
+			memcpy(recvBuffer+1, &playersNumber, sizeof(playersNumber));
+			int len = 1+sizeof(playersNumber);
+			for (i=0; i<playersNumber; i++) {
+				memcpy(recvBuffer+len, playersAddresses[i], sizeof(struct sockaddr_in));
+				len += sizeof(struct sockaddr_in);
+				if (len > BUF_SIZE-sizeof(struct sockaddr_in)) {
+					sendto(fdpsock, recvBuffer, len+1, 0, (struct sockaddr*) newPlayer, sizeof(*newPlayer));
+					bzero(recvBuffer,BUF_SIZE);
+					recvBuffer[0] = CMD_CONTINUE;
+					len = 1;
+				}
 			}
-		}
-		sendto(fdpsock, recvBuffer, len+1, 0, (struct sockaddr*) newPlayer, sizeof(*newPlayer));
-		bzero(recvBuffer, BUF_SIZE);
-		recvBuffer[0] = CMD_END;
-		sendto(fdpsock, recvBuffer, 2, 0, (struct sockaddr*) newPlayer, sizeof(*newPlayer));
+			sendto(fdpsock, recvBuffer, len+1, 0, (struct sockaddr*) newPlayer, sizeof(*newPlayer));
+			bzero(recvBuffer, BUF_SIZE);
+			recvBuffer[0] = CMD_END;
+			sendto(fdpsock, recvBuffer, 2, 0, (struct sockaddr*) newPlayer, sizeof(*newPlayer));
 
-		/* Inform other players that someone has joined */
-		bzero(recvBuffer, BUF_SIZE+1);
-		recvBuffer[0] = CMD_JOIN;
-		// TODO
-
-		return 0;
+			/* Inform other players that someone has joined */
+			//Already done before
+		}	
+		return 0;		
 	}
 	case CMD_CONTINUE:
 		printf("Warning : Unexpected CMD_CONTINUE message received.\n");
@@ -316,9 +323,13 @@ int handleCommand(char *recvBuffer, struct sockaddr_in from) {
 
 void showPlayers() {
 	int i;
-	printf(" -------------------- \n| Connected Players  |\n|--------------------|\n");
+	printf("\x1b[34m -------------------- \n|\x1b[32m Connected Players  \x1b[34m|\n|--------------------|\n");
 	for (i=0; i<playersNumber; i++) {
-		printf("| %d | %d:%d |\n", i, playersAddresses[i]->sin_addr.s_addr, playersAddresses[i]->sin_port);
+		printf("|\x1b[31m %d \x1b[34m|\x1b[33m %d\x1b[0m:\x1b[35m%d \x1b[34m|\n", i, playersAddresses[i]->sin_addr.s_addr,playersAddresses[i]->sin_port);
 	}
-	printf(" -------------------- \n");
+	printf(" -------------------- \x1b[0m\n");
+}
+
+void broadcast() {
+	printf("Broadcasting pls\n");
 }
