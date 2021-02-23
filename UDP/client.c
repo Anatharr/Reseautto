@@ -32,7 +32,6 @@ int pythonsock = -1, fdpsock = -1;
 
 int handleCommand(char *recvBuffer, struct sockaddr_in from);
 void showPlayers();
-void broadcast();
 
 void stop(char *msg) {
 	if (pythonsock>=0) close(pythonsock);
@@ -273,7 +272,6 @@ int handleCommand(char *recvBuffer, struct sockaddr_in from) {
 		playersNumber++;
 
 		showPlayers();
-		broadcast();
 		if (recvBuffer[1]==0) {
 			/* Acknowledge reception */
 			bzero(recvBuffer, BUF_SIZE);
@@ -328,8 +326,4 @@ void showPlayers() {
 		printf("|\x1b[31m %d \x1b[34m|\x1b[33m %d\x1b[0m:\x1b[35m%d \x1b[34m|\n", i, playersAddresses[i]->sin_addr.s_addr,playersAddresses[i]->sin_port);
 	}
 	printf(" -------------------- \x1b[0m\n");
-}
-
-void broadcast() {
-	printf("Broadcasting pls\n");
 }
