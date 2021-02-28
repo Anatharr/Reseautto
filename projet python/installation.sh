@@ -13,10 +13,10 @@ echo "Installation of requirements.txt"
 pip install -r requirements.txt 2> /dev/null
 
 # Set-up pre-commit hooks
-if [ "$1" = "--production" ]; 
-then
-    echo "Finished production building"
-else
-    echo "Pre-commit installation..."
-    pre-commit install
-fi
+#if [ "$1" = "--production" ]; 
+#then
+#    echo "Finished production building"
+#else
+#    echo "Pre-commit installation..."
+#    pre-commit install
+#fi

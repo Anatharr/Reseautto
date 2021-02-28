@@ -3,3 +3,10 @@ client
 
 # nano temporary files
 *.swp
+
+# Cache files
+__pycahe__/
+
+# virtual env
+.venv/
+
