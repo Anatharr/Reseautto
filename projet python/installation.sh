@@ -12,6 +12,10 @@ source .venv/bin/activate 2> /dev/null
 echo "Installation of requirements.txt"
 pip install -r requirements.txt 2> /dev/null
 
+# Compile client
+gcc -o dungeonX/network/client dungeonX/network/client.c -Wall
+
+
 # Set-up pre-commit hooks
 #if [ "$1" = "--production" ]; 
 #then

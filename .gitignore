@@ -5,7 +5,7 @@ client
 *.swp
 
 # Cache files
-__pycahe__/
+__pcache__/
 
 # virtual env
 .venv/
