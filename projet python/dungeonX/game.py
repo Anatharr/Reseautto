@@ -70,13 +70,14 @@ class Game:
 		self.RATIO          = 16/9
 		self.fullscreen     = False
 		self.multiplayer    = False
-		self.joining		= False # indicate if we are joining an online game
+		self.joining        = False # indicate if we are joining an online game
 		self.display        = pygame.display.set_mode(self.DISPLAY_SIZE, flags=pygame.HWSURFACE)
 		self.running        = False
 		self.dt             = 0
 		self.clock          = pygame.time.Clock()
 		self.textDisplayer  = TextDisplayer(self)
 		self.particleSystem = ParticleSystem(self)
+		self.networkModule  = None
 
 		for item in ITEMS_IMAGES:
 			if type(ITEMS_IMAGES[item]) is str:

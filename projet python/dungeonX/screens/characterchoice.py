@@ -85,8 +85,8 @@ class CharacterChoice(Window):
                     addr = input()
                     print("plz enter a port to connect")
                     port = input()
-                network = NetworkModule(connection_addr=tuple((addr,port))) if self.game.joining else NetworkModule()
-                network.start()
+                self.game.networkModule = NetworkModule(connection_addr=tuple((addr,port))) if self.game.joining else NetworkModule()
+                self.game.networkModule.start()
                 
             self.game.screens["game"].selectDefaultPlayers(self._retrievePlayerTypes())
             self.game.screens["game"].setState('walk')
