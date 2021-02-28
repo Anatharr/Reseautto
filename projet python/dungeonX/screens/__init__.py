@@ -10,7 +10,6 @@ from .npctrading import NpcTradingWindow
 from .mainmenu import MainMenu
 from .characterchoice import CharacterChoice
 from .pausemenu import PauseMenu
-from .choixperso import ChoixPerso
 from .gamescreen import GameScreen
 from .mapeditorscreen import MapEditorScreen
 from .mapselectionscreen import MapSelectorScreen

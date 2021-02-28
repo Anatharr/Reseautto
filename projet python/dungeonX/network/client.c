@@ -24,8 +24,6 @@
 
 #define BUF_SIZE 1024
 
-
-
 struct sockaddr_in **playersAddresses = NULL;
 int playersNumber = 0;
 int pythonsock = -1, fdpsock = -1;
@@ -52,8 +50,6 @@ int main(int argc, char **argv) {
 		printf("\e[1mUsage : %s <local port> [host:port]\n\e[0m", argv[0]);
 		exit(EXIT_FAILURE);
 	}
-
-	printf(" argv : %s\n", argv[2]);
 
 	int lPort=-1;
 	sscanf(argv[1], "%d", &lPort);
@@ -190,7 +186,8 @@ int main(int argc, char **argv) {
 	fd_set readfds;
 
 	/* Main loop */
-	while (strcmp(pythonBuff, "exit")!=0) {
+	pythonBuff[0] = 1;
+	while (strcmp(pythonBuff, "exit")!=0 && pythonBuff[0]!=0) {
 		FD_ZERO(&readfds);
 		FD_SET(pythonsock, &readfds);
 		FD_SET(fdpsock, &readfds);

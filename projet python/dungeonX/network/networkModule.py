@@ -41,7 +41,7 @@ class NetworkModule(threading.Thread):
         print("Pipe successfully created.\nPython (pid "+str(os.getpid())+" on ('127.0.0.1', "+ str(port) +")) =============================== C (pid "+ str(pid) +" on "+ str(addr) + ")")
 
     def run(self):
-        while True:
+        while False:
             time.sleep(0.3)
             print("waiting for msg...")
 

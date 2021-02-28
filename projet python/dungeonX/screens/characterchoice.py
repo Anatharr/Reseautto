@@ -82,9 +82,9 @@ class CharacterChoice(Window):
             if self.game.multiplayer:
                 if self.game.joining:
                     print("plz enter an addr to connect")
-                    addr = str(input())    
+                    addr = input()
                     print("plz enter a port to connect")
-                    port = int( input())
+                    port = input()
                 network = NetworkModule(connection_addr=tuple((addr,port))) if self.game.joining else NetworkModule()
                 network.start()
                 
