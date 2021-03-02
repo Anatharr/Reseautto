@@ -3,7 +3,6 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-//#include <sys/mman.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <signal.h>
@@ -16,13 +15,8 @@
 #define CMD_UPDATE 5
 #define CMD_CONTINUE 6
 
-#define JOIN_FLAG_DATA 1 //Put on buffer[1] if the player already got the data
-
-/*
-#define JOIN_FLAG_PLAYER 1
-#define JOIN_FLAG_TABLE 2
-#define JOIN_FLAG_JOIN 3
-*/
+#define JOIN_FLAG_SEND_TABLE 1
+#define JOIN_FLAG_DONT_SEND 2
 
 #define BUF_SIZE 1024
 
@@ -151,16 +145,18 @@ int main(int argc, char **argv) {
 			bzero(fdpBuff, BUF_SIZE);
 			printf("Sending JOIN command...\n");
 			fdpBuff[0] = CMD_JOIN;
+			fdpBuff[1] = CMD_JOIN_SEND_TABLE;
 			sendto(fdpsock, fdpBuff, 2, 0, (struct sockaddr*)&fdpaddr, sizeof(fdpaddr));
-			n = recvfrom(fdpsock, fdpBuff, BUF_SIZE, 0, (struct sockaddr*)&fdpaddr, &len);
+			n = recvfrom(fdpsock, fdpBuff, BUF_SIZE, 0, (struct sockaddr*)&tmp_addr, &len);
 			fdpBuff[n] = '\0';
+			if (tmp_addr.sin_addr.s_addr != fdpaddr.sin_addr.s_addr || tmp_addr.sin_port != fdpaddr.sin_port) continue;
 		}
 		i=0;
 		while (fdpBuff[0]!=CMD_END) {
 			n = recvfrom(fdpsock, fdpBuff, BUF_SIZE, 0, (struct sockaddr*)&tmp_addr, &len);
 			fdpBuff[n] = '\0';
-			if (tmp_addr.sin_addr.s_addr != fdpaddr.sin_addr.s_addr
-				|| tmp_addr.sin_port != fdpaddr.sin_port) continue;
+			if (tmp_addr.sin_addr.s_addr != fdpaddr.sin_addr.s_addr || tmp_addr.sin_port != fdpaddr.sin_port) continue;
+
 			if (fdpBuff[0]==CMD_JOIN || fdpBuff[0]==CMD_CONTINUE) {
 				int len;
 				if (fdpBuff[0]==CMD_JOIN) {
@@ -184,10 +180,19 @@ int main(int argc, char **argv) {
 
 		/* Inform other players */
 		for(int i = 0; i<playersNumber-1; i++) {
-			bzero(fdpBuff, BUF_SIZE+1);
-			fdpBuff[0] = CMD_JOIN;
-			fdpBuff[1] = JOIN_FLAG_DATA; //The player already know the data
-			sendto(fdpsock, fdpBuff, 3, 0, (struct sockaddr*) playersAddresses[i], sizeof(struct sockaddr_in));
+			if (fdpaddr.sin_addr.s_addr != playersAddresses[i]->sin_addr.s_addr || fdpaddr.sin_port != playersAddresses[i]->sin_port) {
+				int count = 3;
+				while (count>0 && fdpBuff[0]!=CMD_ACK) {
+					bzero(fdpBuff, BUF_SIZE+1);
+					fdpBuff[0] = CMD_JOIN;
+					fdpBuff[1] = JOIN_FLAG_DONT_SEND;
+					sendto(fdpsock, fdpBuff, 3, 0, (struct sockaddr*) playersAddresses[i], sizeof(struct sockaddr_in));
+					count--;
+					n = recvfrom(fdpsock, fdpBuff, BUF_SIZE, 0, (struct sockaddr*)&tmp_addr, &len);
+					fdpBuff[n] = '\0';
+					if (tmp_addr.sin_addr.s_addr != fdpaddr.sin_addr.s_addr || tmp_addr.sin_port != fdpaddr.sin_port) continue;
+				}
+			}
 		}
 	}
 
@@ -250,8 +255,12 @@ int handleCommand(char *recvBuffer, struct sockaddr_in from) {
 
 	switch (recvBuffer[0]) {
 	case CMD_JOIN: {
-		printf("Adding player...\n");
 		
+		/* Acknowledge reception */
+		bzero(recvBuffer, BUF_SIZE);
+		recvBuffer[0] = CMD_ACK;
+		sendto(fdpsock, recvBuffer, 2, 0, (struct sockaddr*) &from, sizeof(struct sockaddr_in));
+
 		/* Expand playersAddresses */
 		struct sockaddr_in **tmp = realloc(playersAddresses, (playersNumber+1) * sizeof(struct sockaddr_in*));
 		if (tmp==NULL) {
@@ -272,15 +281,10 @@ int handleCommand(char *recvBuffer, struct sockaddr_in from) {
 		playersNumber++;
 
 		showPlayers();
-		if (recvBuffer[1]==0) {
-			/* Acknowledge reception */
-			bzero(recvBuffer, BUF_SIZE);
-			recvBuffer[0] = CMD_ACK;
-			sendto(fdpsock, recvBuffer, 2, 0, (struct sockaddr*) &from, sizeof(struct sockaddr_in));
+		if (recvBuffer[1]==JOIN_FLAG_SEND_TABLE) {
 			/* Send information to newPlayer */
 			bzero(recvBuffer, BUF_SIZE+1);
 			recvBuffer[0] = CMD_JOIN;
-			//recvBuffer[1] = JOIN_FLAG_TABLE;
 			memcpy(recvBuffer+1, &playersNumber, sizeof(playersNumber));
 			int len = 1+sizeof(playersNumber);
 			for (i=0; i<playersNumber; i++) {
@@ -297,9 +301,6 @@ int handleCommand(char *recvBuffer, struct sockaddr_in from) {
 			bzero(recvBuffer, BUF_SIZE);
 			recvBuffer[0] = CMD_END;
 			sendto(fdpsock, recvBuffer, 2, 0, (struct sockaddr*) newPlayer, sizeof(*newPlayer));
-
-			/* Inform other players that someone has joined */
-			//Already done before
 		}	
 		return 0;		
 	}
