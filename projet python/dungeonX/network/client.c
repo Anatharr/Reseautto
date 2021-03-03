@@ -3,7 +3,6 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-//#include <sys/mman.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <signal.h>
@@ -16,11 +15,8 @@
 #define CMD_UPDATE 5
 #define CMD_CONTINUE 6
 
-/*
-#define JOIN_FLAG_PLAYER 1
-#define JOIN_FLAG_TABLE 2
-#define JOIN_FLAG_JOIN 3
-*/
+#define JOIN_FLAG_SEND_TABLE 1
+#define JOIN_FLAG_DONT_SEND 2
 
 #define BUF_SIZE 1024
 
@@ -109,7 +105,7 @@ int main(int argc, char **argv) {
 	if (getsockname(fdpsock, (struct sockaddr *)&fdpaddr, &len) < 0) {
 		stop("getsockname");
 	}
-	printf("binded to port %d\n", ntohs(fdpaddr.sin_port));
+	printf("binded to port \x1b[31m%d\x1b[0m\n", ntohs(fdpaddr.sin_port));
 	struct timeval timeout;
 	timeout.tv_sec = 0;
 	timeout.tv_usec = 100000;
@@ -149,16 +145,18 @@ int main(int argc, char **argv) {
 			bzero(fdpBuff, BUF_SIZE);
 			printf("Sending JOIN command...\n");
 			fdpBuff[0] = CMD_JOIN;
+			fdpBuff[1] = JOIN_FLAG_SEND_TABLE;
 			sendto(fdpsock, fdpBuff, 2, 0, (struct sockaddr*)&fdpaddr, sizeof(fdpaddr));
-			n = recvfrom(fdpsock, fdpBuff, BUF_SIZE, 0, (struct sockaddr*)&fdpaddr, &len);
+			n = recvfrom(fdpsock, fdpBuff, BUF_SIZE, 0, (struct sockaddr*)&tmp_addr, &len);
 			fdpBuff[n] = '\0';
+			if (tmp_addr.sin_addr.s_addr != fdpaddr.sin_addr.s_addr || tmp_addr.sin_port != fdpaddr.sin_port) continue;
 		}
 		i=0;
 		while (fdpBuff[0]!=CMD_END) {
 			n = recvfrom(fdpsock, fdpBuff, BUF_SIZE, 0, (struct sockaddr*)&tmp_addr, &len);
 			fdpBuff[n] = '\0';
-			if (tmp_addr.sin_addr.s_addr != fdpaddr.sin_addr.s_addr
-				|| tmp_addr.sin_port != fdpaddr.sin_port) continue;
+			if (tmp_addr.sin_addr.s_addr != fdpaddr.sin_addr.s_addr || tmp_addr.sin_port != fdpaddr.sin_port) continue;
+
 			if (fdpBuff[0]==CMD_JOIN || fdpBuff[0]==CMD_CONTINUE) {
 				int len;
 				if (fdpBuff[0]==CMD_JOIN) {
@@ -179,6 +177,23 @@ int main(int argc, char **argv) {
 			}
 		}
 		showPlayers();
+
+		/* Inform other players */
+		for(int i = 0; i<playersNumber-1; i++) {
+			if (fdpaddr.sin_addr.s_addr != playersAddresses[i]->sin_addr.s_addr || fdpaddr.sin_port != playersAddresses[i]->sin_port) {
+				int count = 3;
+				while (count>0 && fdpBuff[0]!=CMD_ACK) {
+					bzero(fdpBuff, BUF_SIZE+1);
+					fdpBuff[0] = CMD_JOIN;
+					fdpBuff[1] = JOIN_FLAG_DONT_SEND;
+					sendto(fdpsock, fdpBuff, 3, 0, (struct sockaddr*) playersAddresses[i], sizeof(struct sockaddr_in));
+					count--;
+					n = recvfrom(fdpsock, fdpBuff, BUF_SIZE, 0, (struct sockaddr*)&tmp_addr, &len);
+					fdpBuff[n] = '\0';
+					if (tmp_addr.sin_addr.s_addr != fdpaddr.sin_addr.s_addr || tmp_addr.sin_port != fdpaddr.sin_port) continue;
+				}
+			}
+		}
 	}
 
 
@@ -186,8 +201,7 @@ int main(int argc, char **argv) {
 	fd_set readfds;
 
 	/* Main loop */
-	pythonBuff[0] = 1;
-	while (strcmp(pythonBuff, "exit")!=0 && pythonBuff[0]!=0) {
+	while (strcmp(pythonBuff, "exit")!=0) {
 		FD_ZERO(&readfds);
 		FD_SET(pythonsock, &readfds);
 		FD_SET(fdpsock, &readfds);
@@ -218,6 +232,7 @@ int main(int argc, char **argv) {
 			}
 			pythonBuff[n] = '\0';
 			printf("C program received : '%s'\n", pythonBuff);
+			if(!strcmp(pythonBuff, "player")) showPlayers();
 		}
 	}
 
@@ -240,11 +255,7 @@ int handleCommand(char *recvBuffer, struct sockaddr_in from) {
 
 	switch (recvBuffer[0]) {
 	case CMD_JOIN: {
-/*		if (recvBuffer[1]==JOIN_FLAG_PLAYER) {
-		}
-		else if (recvBuffer[1]==JOIN_FLAG_JOIN) {
-		}*/
-		printf("Adding player...\n");
+		
 		/* Acknowledge reception */
 		bzero(recvBuffer, BUF_SIZE);
 		recvBuffer[0] = CMD_ACK;
@@ -255,7 +266,7 @@ int handleCommand(char *recvBuffer, struct sockaddr_in from) {
 		if (tmp==NULL) {
 			printf("Error : Could not add player");
 			return -1;
-		}
+			}
 
 		/* Copy the struct sockaddr_in as we don't want to lose it */
 		struct sockaddr_in *newPlayer = malloc(sizeof(struct sockaddr_in));
@@ -270,34 +281,28 @@ int handleCommand(char *recvBuffer, struct sockaddr_in from) {
 		playersNumber++;
 
 		showPlayers();
-
-		/* Send information to newPlayer */
-		bzero(recvBuffer, BUF_SIZE+1);
-		recvBuffer[0] = CMD_JOIN;
-//		recvBuffer[1] = JOIN_FLAG_TABLE;
-		memcpy(recvBuffer+1, &playersNumber, sizeof(playersNumber));
-		int len = 1+sizeof(playersNumber);
-		for (i=0; i<playersNumber; i++) {
-			memcpy(recvBuffer+len, playersAddresses[i], sizeof(struct sockaddr_in));
-			len += sizeof(struct sockaddr_in);
-			if (len > BUF_SIZE-sizeof(struct sockaddr_in)) {
-				sendto(fdpsock, recvBuffer, len+1, 0, (struct sockaddr*) newPlayer, sizeof(*newPlayer));
-				bzero(recvBuffer,BUF_SIZE);
-				recvBuffer[0] = CMD_CONTINUE;
-				len = 1;
+		if (recvBuffer[1]==JOIN_FLAG_SEND_TABLE) {
+			/* Send information to newPlayer */
+			bzero(recvBuffer, BUF_SIZE+1);
+			recvBuffer[0] = CMD_JOIN;
+			memcpy(recvBuffer+1, &playersNumber, sizeof(playersNumber));
+			int len = 1+sizeof(playersNumber);
+			for (i=0; i<playersNumber; i++) {
+				memcpy(recvBuffer+len, playersAddresses[i], sizeof(struct sockaddr_in));
+				len += sizeof(struct sockaddr_in);
+				if (len > BUF_SIZE-sizeof(struct sockaddr_in)) {
+					sendto(fdpsock, recvBuffer, len+1, 0, (struct sockaddr*) newPlayer, sizeof(*newPlayer));
+					bzero(recvBuffer,BUF_SIZE);
+					recvBuffer[0] = CMD_CONTINUE;
+					len = 1;
+				}
 			}
-		}
-		sendto(fdpsock, recvBuffer, len+1, 0, (struct sockaddr*) newPlayer, sizeof(*newPlayer));
-		bzero(recvBuffer, BUF_SIZE);
-		recvBuffer[0] = CMD_END;
-		sendto(fdpsock, recvBuffer, 2, 0, (struct sockaddr*) newPlayer, sizeof(*newPlayer));
-
-		/* Inform other players that someone has joined */
-		bzero(recvBuffer, BUF_SIZE+1);
-		recvBuffer[0] = CMD_JOIN;
-		// TODO
-
-		return 0;
+			sendto(fdpsock, recvBuffer, len+1, 0, (struct sockaddr*) newPlayer, sizeof(*newPlayer));
+			bzero(recvBuffer, BUF_SIZE);
+			recvBuffer[0] = CMD_END;
+			sendto(fdpsock, recvBuffer, 2, 0, (struct sockaddr*) newPlayer, sizeof(*newPlayer));
+		}	
+		return 0;		
 	}
 	case CMD_CONTINUE:
 		printf("Warning : Unexpected CMD_CONTINUE message received.\n");
@@ -317,9 +322,9 @@ int handleCommand(char *recvBuffer, struct sockaddr_in from) {
 
 void showPlayers() {
 	int i;
-	printf(" -------------------- \n| Connected Players  |\n|--------------------|\n");
+	printf("\x1b[34m -------------------- \n|\x1b[32m Connected Players  \x1b[34m|\n|--------------------|\n");
 	for (i=0; i<playersNumber; i++) {
-		printf("| %d | %d:%d |\n", i, playersAddresses[i]->sin_addr.s_addr, playersAddresses[i]->sin_port);
+		printf("|\x1b[31m %d \x1b[34m|\x1b[33m %d\x1b[0m:\x1b[35m%d \x1b[34m|\n", i, playersAddresses[i]->sin_addr.s_addr,playersAddresses[i]->sin_port);
 	}
-	printf(" -------------------- \n");
+	printf(" -------------------- \x1b[0m\n");
 }
